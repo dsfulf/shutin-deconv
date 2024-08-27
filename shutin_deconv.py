@@ -32,21 +32,24 @@ def convolve(x: NDFloat, k: NDFloat) -> NDFloat:
 
     return result
 
+
 @jit
-def convolve_step(x: NDFloat, k: NDFloat, start: int, end: int, result: NDFloat) -> NDFloat:
+def convolve_stepwise(x: NDFloat, k: NDFloat, start: int, end: int) -> None:
     b = len(k) - 1
 
     for i in range(start, min(end + 1, len(x))):
-        result[i] = 0
+        conv = 0
         hi = min(b, i)  # hi is the largest element of our kernel
         lo = max(0, i - b)  # lo is the element corresponding to the smallest element of our kernel
         for j in range(i + 1):
             if hi - j < 0:
                 break
 
-            result[i] += x[lo + j] * k[hi - j]
+            conv += x[lo + j] * k[hi - j]
 
-    return result
+        # this is equivalent to k[i] = 0 - conv, meaning we are solving for
+        # the kernel value that gives x = 0
+        k[i] -= conv
 
 
 def make_kernel(time: NDFloat) -> NDFloat:
@@ -83,10 +86,7 @@ def add_shutin_deconv(
 
     # We perform convolution step-by-step, making the kernel equal to the
     # prior convolution result at each step. This is equivalent to deconvolution.
-    conv_rates = np.zeros_like(time)
-    for i in range(start_idx, end_idx):
-        convolve_step(dimen_rate, kernel, i - 1, i, conv_rates)
-        kernel[i] -= conv_rates[i]
+    convolve_stepwise(dimen_rate, kernel, start_idx, end_idx)
 
     # lastly, we need to "makeup" for the shut-in by adding the rate back in
     # over the shut-in period
@@ -153,7 +153,7 @@ def main() -> None:
     add_shutin_deconv(kernel_deconv, rate, time, start_time, duration, buildup_time)
     rate_deconv = convolve(rate, kernel_deconv)
 
-    #more shut-in periods
+    # more shut-in periods
     kernel_lots = make_kernel(time)
     add_shutin_deconv(kernel_lots, rate, time, start_time, duration, buildup_time)
     add_shutin_deconv(kernel_lots, rate, time, start_time + duration + 30, duration, buildup_time)
@@ -171,8 +171,19 @@ def main() -> None:
     ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
             label=f'More Shut-Ins, EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
 
-    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 600), ylim=(None, None))
-    ax.legend()
+    ax2 = ax.twinx()
+    p_deconv = 5000 * (1 - np.cumsum(kernel_deconv)) + 1000
+    p_lots = 5000 * (1 - np.cumsum(kernel_lots)) + 1000
+
+    ax2.plot(time, p_deconv, c='C2', lw=3, label='Deconvolved Pressre (Kernel)')
+    ax2.plot(time, p_lots, c='C3', lw=3, label='More Shut-Ins')
+
+    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 600), ylim=(0, None))
+    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
 
     plt.savefig('shutin_deconv.png', dpi=300)
     # plt.show()

@@ -59,8 +59,14 @@ def make_kernel(time: NDFloat) -> NDFloat:
     # create a kernel that is the same length as the time array
     kernel = np.zeros_like(time)
 
+    # pwf is intial pressure before well is put on production
+    kernel[time <= 0] = 0
+
+    # get first time index where time > 0
+    idx = np.argmin(time > 0)
+
     # We need to create an impulse to "start" the well onto production
-    kernel[0] = 1
+    kernel[idx] = 1
 
     return kernel
 
@@ -79,13 +85,14 @@ def add_shutin_deconv(
     build_slice = slice(end_idx, build_end_idx)
 
     # create a dimensionless rate array to simplify calculations
-    dimen_rate = rate / rate[0]
+    dimen_rate = rate / np.max(rate)
 
     # get the sum of impulses that already exist in the kernel
     impulses = np.sum(kernel[start_idx:])
 
     # We perform convolution step-by-step, making the kernel equal to the
-    # prior convolution result at each step. This is equivalent to deconvolution.
+    # prior convolution result at each step, which will result in zeroes
+    # when the kernel is convolved. This is effectively a deconvolution.
     convolve_stepwise(dimen_rate, kernel, start_idx, end_idx)
 
     # lastly, we need to "makeup" for the shut-in by adding the rate back in
@@ -109,7 +116,7 @@ def add_shutin(
     # shut-in the well
 
     # create a dimensionless rate array to simplify calculations
-    dimen_rate = rate / rate[0]
+    dimen_rate = rate / np.max(rate)
 
     # We need to create a shut-in event, which is a negative impulse
     # with magnitude equal difference in rate between shut-in time and start time.
@@ -136,7 +143,9 @@ def main() -> None:
     Dterm = 0.06
     mh = dca.MH(qi, Di, b, Dterm)
 
-    time = np.linspace(1, 10000, 10000)
+    evaluation_time = int(round(50 * 365.25, 0))
+
+    time = np.linspace(0, evaluation_time, evaluation_time + 1)
     rate = mh.rate(time)
 
     start_time = 90
@@ -175,10 +184,10 @@ def main() -> None:
     p_deconv = 5000 * (1 - np.cumsum(kernel_deconv)) + 1000
     p_lots = 5000 * (1 - np.cumsum(kernel_lots)) + 1000
 
-    ax2.plot(time, p_deconv, c='C2', lw=3, label='Deconvolved Pressre (Kernel)')
-    ax2.plot(time, p_lots, c='C3', lw=3, label='More Shut-Ins')
+    # ax2.plot(time, p_deconv, c='C2', lw=3, label='Deconvolved Pressure (Kernel)')
+    # ax2.plot(time, p_lots, c='C3', lw=3, label='More Shut-Ins')
 
-    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 600), ylim=(0, None))
+    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
     ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
 
     h1, l1 = ax.get_legend_handles_labels()
@@ -186,6 +195,28 @@ def main() -> None:
     ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
 
     plt.savefig('shutin_deconv.png', dpi=300)
+
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    ax.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
+    ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
+            label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
+
+    ax2 = ax.twinx()
+    p_deconv = 8000 * (1 - np.cumsum(kernel_deconv)) + 1000
+    p_lots = 8000 * (1 - np.cumsum(kernel_lots)) + 1000
+
+    ax2.plot(time, p_lots, c='C4', lw=2, label='Deconvolved Pressure (Kernel)')
+
+    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
+    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
+
+    plt.savefig('shutin_deconv_pressure.png', dpi=300)
     # plt.show()
 
 

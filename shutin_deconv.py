@@ -135,6 +135,106 @@ def add_shutin(
     kernel[build_slice] += (-shutin_impulse - impulse_adj) / buildup_time
 
 
+def dimsionalize_kernel(pi: float, pwf: float, kernel: NDFloat) -> NDFloat:
+    """
+    Dimensionalize the kernel
+    """
+    return pi * (1.0 - np.cumsum(kernel)) + pwf
+
+
+def plot_singles(
+    time: NDFloat, rate: NDFloat,
+    rate_conv: NDFloat, rate_deconv: NDFloat, rate_lots: NDFloat,
+    p_deconv: NDFloat, p_lots: NDFloat
+) -> None:
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    ax.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
+    ax.plot(time, rate_conv, 'o', mec='C1', mfc='w', ms=6, lw=1.5,
+            label=f'Convolved Rate (Naive Kernel), EUR = {np.sum(rate_conv) / 1000:,.0f} MBbl')
+    ax.plot(time, rate_deconv, 'o', mec='C2', mfc='w', ms=3, lw=1.5,
+            label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_deconv) / 1000:,.0f} MBbl')
+    ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
+            label=f'More Shut-Ins, EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
+
+    ax2 = ax.twinx()
+
+    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
+    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
+
+    plt.savefig('shutin_deconv.png', dpi=300)
+
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    ax.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
+    ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
+            label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
+
+    ax2 = ax.twinx()
+
+    ax2.plot(time, p_lots, c='C4', lw=2, label='Deconvolved Pressure (Kernel)')
+
+    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
+    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
+
+    plt.savefig('shutin_deconv_pressure.png', dpi=300)
+    # plt.show()
+
+
+def plot_dual(
+    time: NDFloat, rate: NDFloat,
+    rate_conv: NDFloat, rate_deconv: NDFloat, rate_lots: NDFloat,
+    p_deconv: NDFloat, p_lots: NDFloat
+) -> None:
+    fig, (ax1, ax3) = plt.subplots(nrows=2, figsize=(12, 14))
+
+    ax1.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
+    ax1.plot(time, rate_conv, 'o', mec='C1', mfc='w', ms=6, lw=1.5,
+             label=f'Convolved Rate (Naive Kernel), EUR = {np.sum(rate_conv) / 1000:,.0f} MBbl')
+    ax1.plot(time, rate_deconv, 'o', mec='C2', mfc='w', ms=3, lw=1.5,
+             label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_deconv) / 1000:,.0f} MBbl')
+    ax1.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
+             label=f'More Shut-Ins, EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
+
+    ax2 = ax1.twinx()
+
+    ax1.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
+    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax1.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
+
+
+    ax3.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
+    ax3.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
+             label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
+
+    ax4 = ax3.twinx()
+
+    ax4.plot(time, p_lots, c='C4', lw=2, label='Deconvolved Pressure (Kernel)')
+
+    ax3.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
+    ax4.set(ylabel='Pressure, psi', ylim=(0, 7000))
+
+    h1, l1 = ax3.get_legend_handles_labels()
+    h2, l2 = ax4.get_legend_handles_labels()
+    ax4.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
+
+    plt.tight_layout()
+    plt.savefig('shutin_dual.png', dpi=300)
+    # plt.show()
+
+
 def main() -> None:
     # create some arbitrary decline function
     qi = 1000.0
@@ -161,6 +261,8 @@ def main() -> None:
     kernel_deconv = make_kernel(time)
     add_shutin_deconv(kernel_deconv, rate, time, start_time, duration, buildup_time)
     rate_deconv = convolve(rate, kernel_deconv)
+    p_deconv = dimsionalize_kernel(8000.0, 1000.0, kernel_deconv)
+
 
     # more shut-in periods
     kernel_lots = make_kernel(time)
@@ -168,56 +270,11 @@ def main() -> None:
     add_shutin_deconv(kernel_lots, rate, time, start_time + duration + 30, duration, buildup_time)
     add_shutin_deconv(kernel_lots, rate, time, start_time + duration + 200, duration, buildup_time)
     rate_lots = convolve(rate, kernel_lots)
+    p_lots = dimsionalize_kernel(8000.0, 1000.0, kernel_lots)
 
     # plot the results
-    fig, ax = plt.subplots(figsize=(12, 8))
-
-    ax.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
-    ax.plot(time, rate_conv, 'o', mec='C1', mfc='w', ms=6, lw=1.5,
-            label=f'Convolved Rate (Naive Kernel), EUR = {np.sum(rate_conv) / 1000:,.0f} MBbl')
-    ax.plot(time, rate_deconv, 'o', mec='C2', mfc='w', ms=3, lw=1.5,
-            label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_deconv) / 1000:,.0f} MBbl')
-    ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
-            label=f'More Shut-Ins, EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
-
-    ax2 = ax.twinx()
-    p_deconv = 5000 * (1 - np.cumsum(kernel_deconv)) + 1000
-    p_lots = 5000 * (1 - np.cumsum(kernel_lots)) + 1000
-
-    # ax2.plot(time, p_deconv, c='C2', lw=3, label='Deconvolved Pressure (Kernel)')
-    # ax2.plot(time, p_lots, c='C3', lw=3, label='More Shut-Ins')
-
-    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
-    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
-
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
-
-    plt.savefig('shutin_deconv.png', dpi=300)
-
-
-    fig, ax = plt.subplots(figsize=(12, 8))
-
-    ax.plot(time, rate, lw=1.5, label=f'Rate, EUR = {np.sum(rate) / 1000 :,.0f} MBbl')
-    ax.plot(time, rate_lots, 'o', mec='C3', mfc='w', ms=2, lw=1.5,
-            label=f'Convolved Rate (Deconvolved Kernel), EUR = {np.sum(rate_lots) / 1000:,.0f} MBbl')
-
-    ax2 = ax.twinx()
-    p_deconv = 8000 * (1 - np.cumsum(kernel_deconv)) + 1000
-    p_lots = 8000 * (1 - np.cumsum(kernel_lots)) + 1000
-
-    ax2.plot(time, p_lots, c='C4', lw=2, label='Deconvolved Pressure (Kernel)')
-
-    ax.set(ylabel='Rate, MMcfd', xlabel='Time, days', xlim=(0, 1000), ylim=(0, None))
-    ax2.set(ylabel='Pressure, psi', ylim=(0, 7000))
-
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax2.legend([*h1, *h2], [*l1, *l2], loc='upper right', ncol=1)
-
-    plt.savefig('shutin_deconv_pressure.png', dpi=300)
-    # plt.show()
+    plot_singles(time, rate, rate_conv, rate_deconv, rate_lots, p_deconv, p_lots)
+    plot_dual(time, rate, rate_conv, rate_deconv, rate_lots, p_deconv, p_lots)
 
 
 if __name__ == '__main__':
